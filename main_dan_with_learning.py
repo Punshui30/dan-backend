@@ -6,10 +6,10 @@ import torch
 
 app = FastAPI()
 
-# ✅ CORS middleware for frontend compatibility
+# ✅ Enable CORS for Netlify frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace * with specific frontend URLs in production
+    allow_origins=["https://rad-quokka-8deadd.netlify.app"],  # your live frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,7 +33,7 @@ def load_model():
 # In-memory context log
 context_log = []
 
-# D.A.N. Personality
+# D.A.N. personality
 DAN_PERSONALITY = """
 You are D.A.N. OS Mode – Daniel Simmonds Protocol.
 
@@ -61,7 +61,7 @@ async def copilot_chat(request: PromptRequest):
 
         user_input = request.prompt.strip()
 
-        # Trigger New Glasses Protocol
+        # New Glasses Protocol
         if "new glasses" in user_input.lower():
             response = (
                 "🕶️ D.A.N. is refocusing. Here's a sharper lens...\n\n"
@@ -101,4 +101,3 @@ def get_context_log():
 @app.get("/health")
 def health_check():
     return {"status": "Falcon 7B API is running with D.A.N. personality and memory"}
-
