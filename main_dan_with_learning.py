@@ -6,10 +6,10 @@ import torch
 
 app = FastAPI()
 
-# ✅ CORS middleware to allow frontend to connect
+# ✅ CORS middleware for frontend compatibility
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Optional: Replace "*" with your frontend URL for tighter control
+    allow_origins=["*"],  # Replace * with specific frontend URLs in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +61,7 @@ async def copilot_chat(request: PromptRequest):
 
         user_input = request.prompt.strip()
 
+        # Trigger New Glasses Protocol
         if "new glasses" in user_input.lower():
             response = (
                 "🕶️ D.A.N. is refocusing. Here's a sharper lens...\n\n"
@@ -100,3 +101,4 @@ def get_context_log():
 @app.get("/health")
 def health_check():
     return {"status": "Falcon 7B API is running with D.A.N. personality and memory"}
+
