@@ -2,24 +2,26 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-from typing import List, Dict
-
-# Import context engine tools
-from context_engine import analyze_context, extract_checkpoints
 
 app = FastAPI()
 
-# Load Falcon model (CPU-safe setup)
-model_name = "tiiuae/falcon-7b-instruct"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float32,
-    device_map={"": "cpu"}
-)
+# Lazy-loaded model + tokenizer
+model = None
+tokenizer = None
+
+def load_model():
+    global model, tokenizer
+    if model is None or tokenizer is None:
+        model_name = "tiiuae/falcon-7b-instruct"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float32,
+            device_map={"": "cpu"}
+        )
 
 # In-memory context log
-context_log: List[Dict] = []
+context_log = []
 
 # D.A.N. Personality
 DAN_PERSONALITY = """
@@ -45,6 +47,8 @@ class PromptRequest(BaseModel):
 @app.post("/copilot/chat")
 async def copilot_chat(request: PromptRequest):
     try:
+        load_model()
+
         user_input = request.prompt.strip()
 
         # Trigger New Glasses Protocol
@@ -61,7 +65,6 @@ async def copilot_chat(request: PromptRequest):
             })
             return {"response": response}
 
-        # Construct full prompt
         full_prompt = DAN_PERSONALITY.strip() + "\n\n" + user_input
         inputs = tokenizer(full_prompt, return_tensors="pt", truncation=True, max_length=512)
         output = model.generate(
@@ -72,7 +75,6 @@ async def copilot_chat(request: PromptRequest):
         )
         response = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        # Store in context log
         context_log.append({
             "prompt": user_input,
             "response": response
@@ -86,13 +88,6 @@ async def copilot_chat(request: PromptRequest):
 def get_context_log():
     return {"log": context_log}
 
-@app.get("/copilot/learn")
-def get_learning_summary():
-    return {
-        "themes": analyze_context(context_log),
-        "checkpoints": extract_checkpoints(context_log)
-    }
-
 @app.get("/health")
 def health_check():
-    return {"status": "Falcon 7B API is running with D.A.N. memory and learning mode"}
+    return {"status": "Falcon 7B API is running with D.A.N. personality and memory"}
