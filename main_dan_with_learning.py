@@ -1,9 +1,19 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
 app = FastAPI()
+
+# ✅ CORS middleware to allow frontend to connect
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Optional: Replace "*" with your frontend URL for tighter control
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Lazy-loaded model + tokenizer
 model = None
@@ -51,7 +61,6 @@ async def copilot_chat(request: PromptRequest):
 
         user_input = request.prompt.strip()
 
-        # Trigger New Glasses Protocol
         if "new glasses" in user_input.lower():
             response = (
                 "🕶️ D.A.N. is refocusing. Here's a sharper lens...\n\n"
