@@ -16,7 +16,7 @@ if not OPENROUTER_API_KEY:
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock in production
+    allow_origins=["*"],  # Lock down in production!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,7 +78,7 @@ def gate_in_adapter(reg: AdapterRegistration):
         "id": adapter_id,
         "name": reg.name or adapter_id.title(),
         "description": f"{reg.name or adapter_id} adapter registered dynamically",
-        "actions": ["run", f"launch:{adapter_id}"],
+        "actions": list(reg.config.get("routes", {}).keys()) or ["run"],
         "launchCommand": f"launch:{adapter_id}",
         "status": "ready",
         "config": reg.config,
@@ -105,7 +105,17 @@ def execute_command(req: ExecuteRequest):
     if not adapter:
         raise HTTPException(status_code=404, detail="Adapter not found")
 
-    # Basic simulation of execution
-    return {
-        "result": f"✅ Executed '{req.action}' on adapter '{req.adapter_id}' with params {req.params}"
-    }
+    base_url = adapter["config"].get("base_url")
+    routes = adapter["config"].get("routes", {})
+    route = routes.get(req.action)
+
+    if not base_url or not route:
+        raise HTTPException(status_code=400, detail="Adapter missing base_url or route for action")
+
+    try:
+        url = f"{base_url.rstrip('/')}/{route.lstrip('/')}"
+        resp = requests.post(url, json=req.params, timeout=15)
+        resp.raise_for_status()
+        return {"result": resp.json()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Adapter execution failed: {str(e)}")
