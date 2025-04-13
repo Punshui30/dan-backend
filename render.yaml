@@ -4,8 +4,7 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port 8080
+    plan: starter
     envVars:
       - key: OPENROUTER_API_KEY
-        fromSecret: openrouter-api-key
-    plan: starter
-
+        value: sk-or-your-real-openrouter-key
