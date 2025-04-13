@@ -1,25 +1,46 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import os
+from uuid import uuid4
+from typing import Dict, Any
 
 app = FastAPI()
 
-# ✅ CORS middleware for frontend connection (Netlify, etc.)
+# Load OpenRouter API key from env
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
+
+# In-memory adapter registry
+adapters: Dict[str, Dict[str, Any]] = {}
+
+# Middleware (CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with your Netlify domain for tighter security
+    allow_origins=["*"],  # Lock this down for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 🔐 Load OpenRouter key from Render environment
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# === MODELS ===
 
 class PromptRequest(BaseModel):
     prompt: str
+
+class AdapterRegistration(BaseModel):
+    adapter_id: str
+    name: str
+    config: Dict[str, Any] = {}
+
+class ExecuteRequest(BaseModel):
+    adapter_id: str
+    action: str
+    params: Dict[str, Any]
+
+# === ROUTES ===
 
 @app.post("/copilot/chat")
 async def copilot_chat(req: PromptRequest):
@@ -44,6 +65,38 @@ async def copilot_chat(req: PromptRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/gate")
+def gate_in(reg: AdapterRegistration):
+    adapter_id = reg.adapter_id or str(uuid4())
+    adapters[adapter_id] = {
+        "name": reg.name,
+        "config": reg.config,
+        "status": "ready"
+    }
+    return {"message": f"Adapter {adapter_id} registered", "adapter_id": adapter_id}
+
+@app.get("/api/adapters")
+def list_adapters():
+    return {"adapters": [{"adapter_id": k, **v} for k, v in adapters.items()]}
+
+@app.get("/api/adapters/{adapter_id}/status")
+def adapter_status(adapter_id: str):
+    adapter = adapters.get(adapter_id)
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Adapter not found")
+    return {"adapter_id": adapter_id, "status": adapter.get("status", "unknown")}
+
+@app.post("/api/execute")
+def execute(req: ExecuteRequest):
+    adapter = adapters.get(req.adapter_id)
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Adapter not found")
+    
+    # TODO: Add real logic here
+    return {
+        "result": f"Executed '{req.action}' on adapter '{req.adapter_id}' with params {req.params}"
+    }
+
 @app.get("/health")
 def health():
-    return {"status": "DAN backend running"}
+    return {"status": "DAN backend running", "adapters": list(adapters.keys())}
