@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
 from uuid import uuid4
 import os
 import requests
+import subprocess
 
 app = FastAPI()
 
@@ -119,3 +120,21 @@ def execute_command(req: ExecuteRequest):
         return {"result": resp.json()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Adapter execution failed: {str(e)}")
+
+# === DEV MODE TOGGLE ===
+
+@app.post("/api/dev/toggle")
+def toggle_dan(mode: str = Body(..., embed=True)):
+    if mode not in ["on", "off"]:
+        raise HTTPException(status_code=400, detail="Mode must be 'on' or 'off'")
+
+    try:
+        result = subprocess.run(["./toggle-dan.sh", mode], capture_output=True, text=True)
+        return {
+            "status": "ok",
+            "mode": mode,
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Toggle script failed: {str(e)}")
