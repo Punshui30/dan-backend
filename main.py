@@ -1,9 +1,19 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import os
 
 app = FastAPI()
+
+# ✅ Add CORS to allow Netlify frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://rad-quokka-8deadd.netlify.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -36,4 +46,3 @@ async def copilot_chat(req: PromptRequest):
 @app.get("/health")
 def health():
     return {"status": "DAN backend running"}
-
