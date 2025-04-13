@@ -1,8 +1,22 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from router import route_prompt  # This imports the OpenRouter logic
 
 app = FastAPI()
+
+# ✅ CORS fix: allow Netlify and local dev
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://rad-quokka-8deadd.netlify.app",
+        "http://localhost:5173",
+        "https://zp1v56uxy8rdx5ypatb0ockcb9tr6a-oci3--5173--fb22cd3d.local-credentialless.webcontainer-api.io"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class PromptRequest(BaseModel):
     prompt: str
