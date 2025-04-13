@@ -1,6 +1,6 @@
 import requests
 
-OPENROUTER_API_KEY = "sk-..."  # Replace with your key
+OPENROUTER_API_KEY = "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"
 
 ROUTES = {
     "default": "openai/gpt-4o",
