@@ -8,18 +8,21 @@ from typing import Dict, Any
 
 app = FastAPI()
 
+# Load OpenRouter API key from environment
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
-    raise RuntimeError("OPENROUTER_API_KEY not set")
+    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock in prod
+    allow_origins=["*"],  # Lock down in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# === Models ===
 class PromptRequest(BaseModel):
     prompt: str
 
@@ -33,7 +36,10 @@ class ExecuteRequest(BaseModel):
     action: str
     params: Dict[str, Any]
 
+# === Runtime Adapter Registry ===
 adapters: Dict[str, Dict[str, Any]] = {}
+
+# === Routes ===
 
 @app.post("/copilot/chat")
 async def copilot_chat(req: PromptRequest):
@@ -96,3 +102,5 @@ def execute(req: ExecuteRequest):
 @app.get("/health")
 def health():
     return {"status": "running", "adapters": list(adapters.keys())}
+
+       
