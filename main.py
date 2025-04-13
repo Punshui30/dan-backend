@@ -10,23 +10,17 @@ app = FastAPI()
 
 # Load OpenRouter API key from env
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
 
-# In-memory adapter registry
-adapters: Dict[str, Dict[str, Any]] = {}
-
-# Middleware (CORS)
+# Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock this down for production
+    allow_origins=["*"],  # Lock down in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # === MODELS ===
-
 class PromptRequest(BaseModel):
     prompt: str
 
@@ -39,6 +33,9 @@ class ExecuteRequest(BaseModel):
     adapter_id: str
     action: str
     params: Dict[str, Any]
+
+# === RUNTIME STATE ===
+adapters: Dict[str, Dict[str, Any]] = {}
 
 # === ROUTES ===
 
@@ -67,36 +64,39 @@ async def copilot_chat(req: PromptRequest):
 
 @app.post("/api/gate")
 def gate_in(reg: AdapterRegistration):
-    adapter_id = reg.adapter_id or str(uuid4())
-    adapters[adapter_id] = {
-        "name": reg.name,
+    adapter_id = reg.adapter_id.lower().strip()
+    adapter = {
+        "id": adapter_id,
+        "name": reg.name or adapter_id.title(),
+        "description": f"{reg.name or adapter_id} adapter registered dynamically",
+        "actions": ["run", "launch:" + adapter_id],
+        "launchCommand": f"launch:{adapter_id}",
         "config": reg.config,
         "status": "ready"
     }
-    return {"message": f"Adapter {adapter_id} registered", "adapter_id": adapter_id}
+    adapters[adapter_id] = adapter
+    return adapter
 
 @app.get("/api/adapters")
 def list_adapters():
-    return {"adapters": [{"adapter_id": k, **v} for k, v in adapters.items()]}
+    return {"adapters": list(adapters.values())}
 
 @app.get("/api/adapters/{adapter_id}/status")
 def adapter_status(adapter_id: str):
-    adapter = adapters.get(adapter_id)
+    adapter = adapters.get(adapter_id.lower())
     if not adapter:
         raise HTTPException(status_code=404, detail="Adapter not found")
     return {"adapter_id": adapter_id, "status": adapter.get("status", "unknown")}
 
 @app.post("/api/execute")
 def execute(req: ExecuteRequest):
-    adapter = adapters.get(req.adapter_id)
+    adapter = adapters.get(req.adapter_id.lower())
     if not adapter:
         raise HTTPException(status_code=404, detail="Adapter not found")
-    
-    # TODO: Add real logic here
     return {
-        "result": f"Executed '{req.action}' on adapter '{req.adapter_id}' with params {req.params}"
+        "result": f"✅ Executed '{req.action}' on adapter '{req.adapter_id}' with params {req.params}"
     }
 
 @app.get("/health")
 def health():
-    return {"status": "DAN backend running", "adapters": list(adapters.keys())}
+    return {"status": "running", "adapters": list(adapters.keys())}
