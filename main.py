@@ -1,35 +1,33 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from router import route_prompt  # This imports the OpenRouter logic
+# router.py (or inline in main.py)
+import requests
+import os
 
-app = FastAPI()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# ✅ CORS fix: allow Netlify and local dev
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://rad-quokka-8deadd.netlify.app",
-        "http://localhost:5173",
-        "https://zp1v56uxy8rdx5ypatb0ockcb9tr6a-oci3--5173--fb22cd3d.local-credentialless.webcontainer-api.io"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def route_prompt(prompt: str, mode: str = "default") -> str:
+    if not OPENROUTER_API_KEY:
+        raise Exception("Missing OpenRouter API key")
 
-class PromptRequest(BaseModel):
-    prompt: str
-    mode: str = "default"  # optional LLM mode (e.g., "creative", "fast_parse")
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
-@app.post("/copilot/chat")
-async def copilot_chat(req: PromptRequest):
-    try:
-        response = route_prompt(req.prompt, req.mode)
-        return {"response": response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    payload = {
+        "model": "openai/gpt-4",  # or whatever model you want
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
 
-@app.get("/health")
-def health_check():
-    return {"status": "OpenRouter backend is active"}
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"OpenRouter Error: {response.status_code} - {response.text}")
+
+    data = response.json()
+    return data["choices"][0]["message"]["content"]
