@@ -1,33 +1,21 @@
-# router.py (or inline in main.py)
-import requests
-import os
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from router import route_prompt  # Handles OpenRouter calls
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+app = FastAPI()  # ✅ REQUIRED for Render to find your app
 
-def route_prompt(prompt: str, mode: str = "default") -> str:
-    if not OPENROUTER_API_KEY:
-        raise Exception("Missing OpenRouter API key")
+class PromptRequest(BaseModel):
+    prompt: str
+    mode: str = "default"
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+@app.post("/copilot/chat")
+async def copilot_chat(req: PromptRequest):
+    try:
+        response = route_prompt(req.prompt, req.mode)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    payload = {
-        "model": "openai/gpt-4",  # or whatever model you want
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=payload
-    )
-
-    if response.status_code != 200:
-        raise Exception(f"OpenRouter Error: {response.status_code} - {response.text}")
-
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
+@app.get("/health")
+def health_check():
+    return {"status": "OpenRouter backend is active"}
