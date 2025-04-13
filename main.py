@@ -1,10 +1,21 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import requests
 import os
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
 app = FastAPI()
 
+# ✅ CORS middleware for frontend connection (Netlify, etc.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with your Netlify domain for tighter security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 🔐 Load OpenRouter key from Render environment
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 class PromptRequest(BaseModel):
