@@ -1,61 +1,65 @@
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import StreamingResponse
-import os
-import httpx
-import json
-from typing import AsyncGenerator
+from fastapi import APIRouter, HTTPException, Body
+from typing import Dict, Any
+from uuid import uuid4
 
 router = APIRouter()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = "gpt-4o"
+# In-memory adapter registry
+adapters: Dict[str, Dict[str, Any]] = {}
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set in .env")
+@router.get("/adapters")
+def list_adapters():
+    return {"adapters": list(adapters.values())}
 
-async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
+@router.get("/adapters/{adapter_id}/status")
+def get_adapter_status(adapter_id: str):
+    adapter = adapters.get(adapter_id.lower())
+    if not adapter:
+        return {"adapter_id": adapter_id, "status": "not gated"}
+    return {"adapter_id": adapter_id, "status": adapter["status"]}
+
+@router.post("/gate")
+def gate_in_adapter(
+    adapter_id: str = Body(...),
+    name: str = Body(...),
+    config: Dict[str, Any] = Body(...)
+):
+    normalized_id = adapter_id.strip().lower()
+
+    adapter = {
+        "id": normalized_id,
+        "name": name,
+        "description": f"{name} adapter registered",
+        "actions": list(config.get("routes", {}).keys()) or ["run"],
+        "launchCommand": f"launch:{normalized_id}",
+        "status": "ready",
+        "config": config,
+        "registeredAt": str(uuid4())
     }
 
-    payload = {
-        "model": MODEL,
-        "stream": True,
-        "temperature": 0.6,
-        "messages": [
-            {"role": "system", "content": "You are DAN, the Operating System. You can launch tools, run actions, automate workflows, and respond with precision."},
-            {"role": "user", "content": prompt}
-        ]
+    adapters[normalized_id] = adapter
+    return adapter
+
+@router.post("/execute")
+def execute_command(
+    adapter_id: str = Body(...),
+    action: str = Body(...),
+    params: Dict[str, Any] = Body(default={})
+):
+    adapter = adapters.get(adapter_id.lower())
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Adapter not found")
+
+    base_url = adapter["config"].get("base_url")
+    route = adapter["config"].get("routes", {}).get(action)
+
+    if not base_url or not route:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing base_url or route for action '{action}'"
+        )
+
+    # Simulate execution
+    return {
+        "result": f"✅ Executed '{action}' on '{adapter_id}' with params: {params}"
     }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        try:
-            async with client.stream("POST", OPENAI_API_URL, headers=headers, json=payload) as response:
-                if response.status_code != 200:
-                    detail = await response.aread()
-                    raise HTTPException(status_code=500, detail=detail.decode())
-
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[len("data: "):].strip()
-                        if data == "[DONE]":
-                            break
-                        try:
-                            delta = json.loads(data)["choices"][0]["delta"]
-                            if "content" in delta:
-                                yield delta["content"]
-                        except Exception:
-                            continue
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
-
-@router.post("/stream")
-async def copilot_stream(request: Request):
-    data = await request.json()
-    prompt = data.get("prompt")
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Prompt required")
-    return StreamingResponse(stream_openai(prompt), media_type="text/plain")
-
