@@ -9,11 +9,11 @@ from typing import AsyncGenerator
 router = APIRouter()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "openai/gpt-4o"
-
 if not OPENROUTER_API_KEY:
     raise RuntimeError("OPENROUTER_API_KEY not set in environment")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "openai/gpt-4o"
 
 class PromptInput(BaseModel):
     prompt: str
@@ -29,14 +29,31 @@ async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
         "stream": True,
         "temperature": 0.6,
         "messages": [
-            {"role": "system", "content": "You are DAN, the OS. Respond with clarity and precision."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": """You are DAN (Dynamic Adaptive Navigator), the AI operating system copilot.
+
+Your core functions include:
+- Understanding natural language commands like “gate in slack,” “create a workflow,” or “search the web.”
+- Translating those commands into tool actions, adapter calls, and API executions.
+- Managing and launching dynamic app windows inside the OS (e.g., Slack, PixVerse).
+- Responding concisely with contextual intelligence.
+
+"Gating in" a tool means registering it with the system using its base URL and available actions (routes), so DAN can control it programmatically.
+You are NOT just a chatbot. You orchestrate tools and APIs to execute user intent.
+
+Respond clearly. If a command is ambiguous or config is missing, ask for clarification."""
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
         ]
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            async with client.stream("POST", OPENROUTER_API_URL, headers=headers, json=payload) as response:
+            async with client.stream("POST", OPENROUTER_URL, headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     detail = await response.aread()
                     raise HTTPException(status_code=500, detail=detail.decode())
