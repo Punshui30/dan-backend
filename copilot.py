@@ -9,16 +9,13 @@ from typing import AsyncGenerator
 router = APIRouter()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "openai/gpt-4o"
+SEARCH_API = "http://localhost:8000/api/search"  # or use full Render URL if needed
 
 class PromptInput(BaseModel):
     prompt: str
 
-async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
+async def stream_openrouter(prompt: str) -> AsyncGenerator[str, None]:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
@@ -29,31 +26,14 @@ async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
         "stream": True,
         "temperature": 0.6,
         "messages": [
-            {
-                "role": "system",
-                "content": """You are DAN (Dynamic Adaptive Navigator), the AI operating system copilot.
-
-Your core functions include:
-- Understanding natural language commands like “gate in slack,” “create a workflow,” or “search the web.”
-- Translating those commands into tool actions, adapter calls, and API executions.
-- Managing and launching dynamic app windows inside the OS (e.g., Slack, PixVerse).
-- Responding concisely with contextual intelligence.
-
-"Gating in" a tool means registering it with the system using its base URL and available actions (routes), so DAN can control it programmatically.
-You are NOT just a chatbot. You orchestrate tools and APIs to execute user intent.
-
-Respond clearly. If a command is ambiguous or config is missing, ask for clarification."""
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
+            {"role": "system", "content": "You are DAN, the Operating System. If you detect a command like 'gate in X', but lack route/base_url info, call the /search endpoint with 'API docs for X' and return what you find."},
+            {"role": "user", "content": prompt}
         ]
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            async with client.stream("POST", OPENROUTER_URL, headers=headers, json=payload) as response:
+            async with client.stream("POST", "https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     detail = await response.aread()
                     raise HTTPException(status_code=500, detail=detail.decode())
@@ -76,4 +56,22 @@ Respond clearly. If a command is ambiguous or config is missing, ask for clarifi
 async def copilot_stream(payload: PromptInput):
     if not payload.prompt:
         raise HTTPException(status_code=400, detail="Prompt required")
-    return StreamingResponse(stream_openai(payload.prompt), media_type="text/plain")
+
+    # Detect "gate in" if we want to proactively call /search
+    if payload.prompt.lower().startswith("gate in"):
+        tool = payload.prompt.split("gate in", 1)[-1].strip().split()[0]
+        if tool:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    search = await client.get(SEARCH_API, params={"q": f"API docs for {tool}"})
+                    hits = search.json().get("results", [])
+                    if hits:
+                        doc_url = hits[0].get("link", "No link")
+                        return StreamingResponse(
+                            iter([f"I found documentation for {tool}: {doc_url}. Would you like me to gate it in?"]),
+                            media_type="text/plain"
+                        )
+            except Exception as e:
+                print("Web search failed:", str(e))
+
+    return StreamingResponse(stream_openrouter(payload.prompt), media_type="text/plain")
