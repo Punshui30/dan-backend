@@ -8,19 +8,19 @@ from typing import AsyncGenerator
 
 router = APIRouter()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = "gpt-4o"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "anthropic/claude-3-opus-20240229"
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set in .env")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
 
 class PromptInput(BaseModel):
     prompt: str
 
 async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -36,7 +36,7 @@ async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            async with client.stream("POST", OPENAI_API_URL, headers=headers, json=payload) as response:
+            async with client.stream("POST", OPENROUTER_API_URL, headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     detail = await response.aread()
                     raise HTTPException(status_code=500, detail=detail.decode())
