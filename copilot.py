@@ -8,20 +8,19 @@ from typing import AsyncGenerator
 
 router = APIRouter()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-MODEL = "gpt-4o"
-BACKEND_URL = os.getenv("BACKEND_URL", "https://dan-backend-1.onrender.com")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "openai/gpt-4o"
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set in environment")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("OPENROUTER_API_KEY not set in environment")
 
 class PromptInput(BaseModel):
     prompt: str
 
-async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
+async def stream_openrouter(prompt: str) -> AsyncGenerator[str, None]:
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -30,14 +29,14 @@ async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
         "stream": True,
         "temperature": 0.6,
         "messages": [
-            {"role": "system", "content": "You are DAN, the OS. Respond with clarity and precision. You have access to live web search via /api/search and can return useful tool documentation links."},
+            {"role": "system", "content": "You are DAN, the OS. Respond with clarity and precision."},
             {"role": "user", "content": prompt}
         ]
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
         try:
-            async with client.stream("POST", OPENAI_API_URL, headers=headers, json=payload) as response:
+            async with client.stream("POST", OPENROUTER_URL, headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     detail = await response.aread()
                     raise HTTPException(status_code=500, detail=detail.decode())
@@ -60,24 +59,4 @@ async def stream_openai(prompt: str) -> AsyncGenerator[str, None]:
 async def copilot_stream(payload: PromptInput):
     if not payload.prompt:
         raise HTTPException(status_code=400, detail="Prompt required")
-
-    # ✅ Fallback: If prompt includes "gate in" but DAN has no config, search API docs
-    if "gate in" in payload.prompt.lower():
-        try:
-            tool_name = payload.prompt.lower().split("gate in", 1)[1].strip().split()[0]
-            async with httpx.AsyncClient(timeout=10) as client:
-                res = await client.get(
-                    f"{BACKEND_URL}/api/search",
-                    params={"q": f"{tool_name} API documentation"}
-                )
-                if res.status_code == 200:
-                    docs = res.json().get("results", [])
-                    if docs:
-                        top_link = docs[0].get("link", "")
-                        return {"response": f"I found documentation for {tool_name}: {top_link}"}
-        except Exception as e:
-            print(f"[DAN Search fallback error]: {e}")
-
-    return StreamingResponse(stream_openai(payload.prompt), media_type="text/plain")
-
-   
+    return StreamingResponse(stream_openrouter(payload.prompt), media_type="text/plain")
